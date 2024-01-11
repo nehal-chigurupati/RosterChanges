@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from nba_api.stats.static import teams
-from nba_api.stats.endpoints import teamestimatedmetrics, commonteamroster, teamyearbyyearstats
+from nba_api.stats.endpoints import teamestimatedmetrics, commonteamroster, teamyearbyyearstats, teamgamelog
 from sqlalchemy import create_engine
 
 def get_all_teams():
@@ -26,10 +26,24 @@ def get_roster(team_id, season):
     data = commonteamroster.CommonTeamRoster(team_id=team_id, season=season)
     return data.get_data_frames()[0]
 
+def get_playoff_win_count(team_id, season):
+    # Get all teams
+    nba_teams = teams.get_teams()
+
+    # Get playoff game log for the team in the specified season
+    gamelog = teamgamelog.TeamGameLog(team_id=team_id, season=season, season_type_all_star='Playoffs')
+
+    # Extract the DataFrame
+    games = gamelog.get_data_frames()[0]
+
+    # Count wins
+    wins = len(games[games['WL'] == 'W'])
+
+    return wins
+
 
 #Connect to sqlite database
 engine = create_engine("sqlite:///Data/team_database.db")
-
 
 #Get all team abbreviations and their corresponding IDs
 team_info = get_all_teams()
@@ -67,6 +81,15 @@ for index, row in team_seasons.iterrows():
 season_rosters = pd.concat(season_rosters)
 season_rosters.to_sql("TEAM_SEASON_ROSTERS", engine, if_exists="replace", index=False)
 
+#Get playoff win count for each team season
+num_playoff_wins = []
+counter = 1
+for index, row in team_seasons.iterrows():
+    num_playoff_wins.append(get_playoff_win_count(row["TEAM_ID"], row["YEAR"]))
+    print("Collecting team playoff win count " + str(counter) + "/" + str(len(team_seasons)))
+    counter += 1
 
-
+playoff_win_data = pd.DataFrame({"TEAM_ID": team_seasons["TEAM_ID"], "SEASON": team_seasons["YEAR"], "NUM_PLAYOFF_WINS":num_playoff_wins})
+playoff_win_data.to_sql("TEAM_SEASON_PLAYOFF_WINS", engine, if_exists="replace", index=False)
+    
 
